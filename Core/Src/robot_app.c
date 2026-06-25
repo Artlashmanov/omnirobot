@@ -145,25 +145,27 @@ static void motor_rear_left_stop(void)
   __HAL_TIM_SET_COMPARE(g_htim1, TIM_CHANNEL_3, 0);
 }
 
-/* 4-й мотор теперь на TIM2_CH3 / PB10 */
+/* 4-й мотор: PWM на TIM2_CH3 / PB10, DIR перенесены на PB14/PB15.
+ * PB6/PB7 освобождены под TIM4 encoder.
+ */
 static void motor_rear_right_forward(uint16_t pwm)
 {
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_SET);
   __HAL_TIM_SET_COMPARE(g_htim2, TIM_CHANNEL_3, pwm);
 }
 
 static void motor_rear_right_backward(uint16_t pwm)
 {
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_RESET);
   __HAL_TIM_SET_COMPARE(g_htim2, TIM_CHANNEL_3, pwm);
 }
 
 static void motor_rear_right_stop(void)
 {
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_14, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_15, GPIO_PIN_RESET);
   __HAL_TIM_SET_COMPARE(g_htim2, TIM_CHANNEL_3, 0);
 }
 
