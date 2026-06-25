@@ -1,0 +1,33 @@
+# STM32CubeIDE / Eclipse workspace-local files
+.metadata/
+.recommenders/
+
+# Build outputs
+Debug/
+Release/
+build/
+*.o
+*.obj
+*.d
+*.su
+*.cyclo
+*.elf
+*.bin
+*.hex
+*.map
+*.list
+*.lst
+*.srec
+
+# Local tooling / agent state
+.agents/
+.codex/
+
+# OS/editor noise
+Thumbs.db
+Desktop.ini
+*.swp
+*.tmp
+*.bak
+*.log
+
