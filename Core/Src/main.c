@@ -67,7 +67,6 @@ static void MX_TIM8_Init(void);
 int main(void)
 {
   uint8_t ch = 0;
-  EncoderApp_Sample_t encoder_sample = {0};
 
   HAL_Init();
   SystemClock_Config();
@@ -110,15 +109,26 @@ int main(void)
 
   while (1)
   {
+    uint32_t now_ms = HAL_GetTick();
+
     if (HAL_UART_Receive(&hcom_uart[COM1], &ch, 1, 1U) == HAL_OK)
     {
-      RobotApp_HandleChar(ch);
+      if (ch == 'x')
+      {
+        EncoderApp_ToggleDebug();
+      }
+      else
+      {
+        RobotApp_HandleChar(ch);
+      }
     }
 
-    if (EncoderApp_Poll(HAL_GetTick(), &encoder_sample) != 0U)
+    if (EncoderApp_Poll(now_ms) != 0U)
     {
-      EncoderApp_PrintDebug(&encoder_sample);
+      EncoderApp_PrintDebug();
     }
+
+    CAN_App_TelemetryTask(now_ms);
   }
 }
 

@@ -1,5 +1,6 @@
 #include "can_app.h"
 #include "robot_app.h"
+#include "encoder_app.h"
 
 extern FDCAN_HandleTypeDef hfdcan1;
 
@@ -13,8 +14,38 @@ extern FDCAN_HandleTypeDef hfdcan1;
 #define ID_EVT_ACK          0x181U
 #define ID_EVT_STATUS       0x182U
 #define ID_EVT_PONG         0x183U
+#define ID_EVT_BASE_STATUS  0x190U
+#define ID_EVT_WHEEL_STATE  0x191U
 
-static void CAN_App_SendStd8(uint16_t std_id, const uint8_t data[8])
+#define CAN_APP_BASE_STATUS_PERIOD_MS  200U
+#define CAN_APP_WHEEL_STATE_PERIOD_MS  100U
+
+#define CAN_APP_STATUS_FLAG_ENCODERS_READY 0x01U
+#define CAN_APP_STATUS_FLAG_ENCODER_DEBUG  0x02U
+
+static uint8_t s_telem_seq = 0U;
+static uint32_t s_last_base_status_ms = 0U;
+static uint32_t s_last_wheel_state_ms = 0U;
+
+static void put_i16_le(uint8_t *dst, int16_t value)
+{
+  uint16_t u = (uint16_t)value;
+
+  dst[0] = (uint8_t)(u & 0xFFU);
+  dst[1] = (uint8_t)((u >> 8) & 0xFFU);
+}
+
+static void put_i32_le(uint8_t *dst, int32_t value)
+{
+  uint32_t u = (uint32_t)value;
+
+  dst[0] = (uint8_t)(u & 0xFFU);
+  dst[1] = (uint8_t)((u >> 8) & 0xFFU);
+  dst[2] = (uint8_t)((u >> 16) & 0xFFU);
+  dst[3] = (uint8_t)((u >> 24) & 0xFFU);
+}
+
+static HAL_StatusTypeDef CAN_App_TrySendStd8(uint16_t std_id, const uint8_t data[8])
 {
   FDCAN_TxHeaderTypeDef txHeader = {0};
 
@@ -28,10 +59,60 @@ static void CAN_App_SendStd8(uint16_t std_id, const uint8_t data[8])
   txHeader.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
   txHeader.MessageMarker = 0;
 
-  if (HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &txHeader, (uint8_t *)data) != HAL_OK)
+  return HAL_FDCAN_AddMessageToTxFifoQ(&hfdcan1, &txHeader, (uint8_t *)data);
+}
+
+static void CAN_App_SendStd8(uint16_t std_id, const uint8_t data[8])
+{
+  if (CAN_App_TrySendStd8(std_id, data) != HAL_OK)
   {
     Error_Handler();
   }
+}
+
+static void CAN_App_SendBaseStatus(void)
+{
+  uint8_t txData[8] = {0};
+  uint8_t status_flags = 0U;
+
+  if (EncoderApp_IsReady() != 0U)
+  {
+    status_flags |= CAN_APP_STATUS_FLAG_ENCODERS_READY;
+  }
+
+  if (EncoderApp_GetDebugEnabled() != 0U)
+  {
+    status_flags |= CAN_APP_STATUS_FLAG_ENCODER_DEBUG;
+  }
+
+  txData[0] = PROTO_VERSION;
+  txData[1] = s_telem_seq++;
+  txData[2] = (uint8_t)RobotApp_GetMotion();
+  txData[3] = (uint8_t)(RobotApp_GetSpeed() > 255 ? 255 : RobotApp_GetSpeed());
+  txData[4] = ENCODER_APP_COUNT;
+  txData[5] = status_flags;
+  txData[6] = 0U; /* error_flags, reserved for future faults */
+  txData[7] = 0U;
+
+  (void)CAN_App_TrySendStd8(ID_EVT_BASE_STATUS, txData);
+}
+
+static void CAN_App_SendWheelState(uint8_t wheel_index)
+{
+  const EncoderApp_WheelState_t *wheel = EncoderApp_GetWheelState(wheel_index);
+  uint8_t txData[8] = {0};
+
+  if (wheel == NULL)
+  {
+    return;
+  }
+
+  txData[0] = wheel->index;
+  txData[1] = wheel->flags;
+  put_i16_le(&txData[2], wheel->delta_ticks);
+  put_i32_le(&txData[4], wheel->speed_ticks_per_sec);
+
+  (void)CAN_App_TrySendStd8(ID_EVT_WHEEL_STATE, txData);
 }
 
 void CAN_App_Init(void)
@@ -67,6 +148,29 @@ void CAN_App_Init(void)
   if (HAL_FDCAN_Start(&hfdcan1) != HAL_OK)
   {
     Error_Handler();
+  }
+
+  s_telem_seq = 0U;
+  s_last_base_status_ms = HAL_GetTick();
+  s_last_wheel_state_ms = HAL_GetTick();
+}
+
+void CAN_App_TelemetryTask(uint32_t now_ms)
+{
+  if ((uint32_t)(now_ms - s_last_base_status_ms) >= CAN_APP_BASE_STATUS_PERIOD_MS)
+  {
+    s_last_base_status_ms = now_ms;
+    CAN_App_SendBaseStatus();
+  }
+
+  if ((uint32_t)(now_ms - s_last_wheel_state_ms) >= CAN_APP_WHEEL_STATE_PERIOD_MS)
+  {
+    s_last_wheel_state_ms = now_ms;
+
+    for (uint8_t i = 0U; i < ENCODER_APP_COUNT; i++)
+    {
+      CAN_App_SendWheelState(i);
+    }
   }
 }
 
