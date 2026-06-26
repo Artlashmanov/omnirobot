@@ -117,6 +117,10 @@ int main(void)
       {
         EncoderApp_ToggleDebug();
       }
+      else if (ch == 'c')
+      {
+        CAN_App_ToggleDebug();
+      }
       else
       {
         RobotApp_HandleChar(ch);

@@ -456,6 +456,7 @@ void RobotApp_PrintHelp(void)
   uart_send_str("+ - speed up (5%)\r\n");
   uart_send_str("- - speed down (5%)\r\n");
   uart_send_str("x - encoder debug on/off\r\n");
+  uart_send_str("c - CAN debug on/off\r\n");
   uart_send_str("i - I2C scan\r\n");
   uart_send_str("v - INA228 check\r\n");
   uart_send_str("h - help\r\n");
