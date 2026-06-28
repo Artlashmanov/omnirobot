@@ -1,6 +1,7 @@
 #include "can_app.h"
 #include "robot_app.h"
 #include "encoder_app.h"
+#include "power_app.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -18,9 +19,11 @@ extern FDCAN_HandleTypeDef hfdcan1;
 #define ID_EVT_PONG         0x183U
 #define ID_EVT_BASE_STATUS  0x190U
 #define ID_EVT_WHEEL_STATE  0x191U
+#define ID_EVT_INA228_STATUS 0x192U
 
 #define CAN_APP_BASE_STATUS_PERIOD_MS        200U
 #define CAN_APP_WHEEL_STATE_FRAME_PERIOD_MS   25U
+#define CAN_APP_POWER_STATUS_PERIOD_MS       200U
 #define CAN_APP_DEBUG_SUMMARY_PERIOD_MS     1000U
 
 #define CAN_APP_STATUS_FLAG_ENCODERS_READY 0x01U
@@ -30,8 +33,10 @@ extern FDCAN_HandleTypeDef hfdcan1;
 #define CAN_APP_ERROR_FLAG_RX_FAIL         0x02U
 
 static uint8_t s_telem_seq = 0U;
+static uint8_t s_power_seq = 0U;
 static uint32_t s_last_base_status_ms = 0U;
 static uint32_t s_last_wheel_state_ms = 0U;
+static uint32_t s_last_power_status_ms = 0U;
 static uint32_t s_last_debug_summary_ms = 0U;
 static uint8_t s_next_wheel_index = 0U;
 static uint8_t s_can_debug_enabled = 0U;
@@ -47,6 +52,11 @@ static uint8_t s_last_rx_data[8] = {0};
 static HAL_StatusTypeDef s_last_tx_status = HAL_OK;
 static uint16_t s_last_tx_id = 0U;
 
+static void put_u16_le(uint8_t *dst, uint16_t value)
+{
+  dst[0] = (uint8_t)(value & 0xFFU);
+  dst[1] = (uint8_t)((value >> 8) & 0xFFU);
+}
 static void put_i16_le(uint8_t *dst, int16_t value)
 {
   uint16_t u = (uint16_t)value;
@@ -147,6 +157,36 @@ static void CAN_App_SendBaseStatus(void)
   }
 }
 
+static void CAN_App_SendPowerStatus(void)
+{
+  const PowerApp_State_t *power = PowerApp_GetState();
+  uint8_t txData[8] = {0};
+  HAL_StatusTypeDef status;
+
+  if (power == NULL)
+  {
+    return;
+  }
+
+  txData[0] = PROTO_VERSION;
+  txData[1] = s_power_seq++;
+  put_u16_le(&txData[2], power->bus_voltage_mv);
+  put_i16_le(&txData[4], power->current_ma);
+  txData[6] = power->power_w;
+  txData[7] = power->flags;
+
+  status = CAN_App_TrySendStd8(ID_EVT_INA228_STATUS, txData);
+
+  if (s_can_debug_enabled != 0U)
+  {
+    printf("can tx 192 st=%ld mv=%u ma=%ld w=%u flags=0x%02X\r\n",
+           (long)status,
+           power->bus_voltage_mv,
+           (long)power->current_ma,
+           power->power_w,
+           power->flags);
+  }
+}
 static void CAN_App_SendWheelState(uint8_t wheel_index)
 {
   const EncoderApp_WheelState_t *wheel = EncoderApp_GetWheelState(wheel_index);
@@ -247,8 +287,10 @@ void CAN_App_Init(void)
   }
 
   s_telem_seq = 0U;
+  s_power_seq = 0U;
   s_last_base_status_ms = HAL_GetTick();
   s_last_wheel_state_ms = HAL_GetTick();
+  s_last_power_status_ms = HAL_GetTick();
   s_last_debug_summary_ms = HAL_GetTick();
   s_next_wheel_index = 0U;
   s_tx_ok_count = 0U;
@@ -270,6 +312,12 @@ void CAN_App_TelemetryTask(uint32_t now_ms)
     CAN_App_SendBaseStatus();
   }
 
+
+  if ((uint32_t)(now_ms - s_last_power_status_ms) >= CAN_APP_POWER_STATUS_PERIOD_MS)
+  {
+    s_last_power_status_ms = now_ms;
+    CAN_App_SendPowerStatus();
+  }
   if ((uint32_t)(now_ms - s_last_wheel_state_ms) >= CAN_APP_WHEEL_STATE_FRAME_PERIOD_MS)
   {
     s_last_wheel_state_ms = now_ms;

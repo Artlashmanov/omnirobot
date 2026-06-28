@@ -15,6 +15,7 @@
 #include "robot_app.h"
 #include "can_app.h"
 #include "encoder_app.h"
+#include "power_app.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -97,6 +98,7 @@ int main(void)
   }
 
   RobotApp_Init(&hi2c1, &htim1, &htim2);
+  PowerApp_Init(&hi2c1);
   HAL_Delay(200);
   RobotApp_PrintHelp();
   CAN_App_Init();
@@ -132,6 +134,7 @@ int main(void)
       EncoderApp_PrintDebug();
     }
 
+    PowerApp_Poll(now_ms);
     CAN_App_TelemetryTask(now_ms);
   }
 }
